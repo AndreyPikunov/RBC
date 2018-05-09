@@ -33,7 +33,7 @@ __global__ void calculate_area(Lock lock, REAL *area, REAL *var, size_t N) {
 
     __syncthreads();
 
-    int i = blockDim.x/2; // TODO general case, now it MUST BE PowOf2
+    int i = THREADS/2; // TODO general case, now it MUST BE PowOf2
     while (i != 0) {
         if (threadIdx.x < i)
             cache[threadIdx.x] += cache[threadIdx.x + i];

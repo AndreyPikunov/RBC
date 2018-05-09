@@ -12,6 +12,7 @@ __global__ void mul(REAL *answer, REAL *a, REAL mult, size_t size);
 
 __global__ void fill(REAL *a, REAL value, size_t size);
 
+//__global__ void sum(REAL *answer, REAL *a, size_t size);
 
 inline __device__ size_t get_tid() {
     return blockIdx.x * blockDim.x + threadIdx.x;

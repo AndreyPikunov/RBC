@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstddef> //size_t
 #include <algorithm> //swap
+#include <map>
 #include <fstream>
 #include "kernels.cuh"
 #include "functions.cuh"
@@ -9,26 +10,69 @@
 
 int main() {
 
-    size_t N = 113;
+    std::ifstream inFile;
+
+    std::map<std::string, REAL> constants;
+    std::string key;
+    REAL value;
+
+    /*********** R E A D  I N S H A P E *****************/
+    std::string line;
+    size_t N = 0;
+
+    inFile.open("../shape_cpp.txt");
+    while (std::getline(inFile, line) && line!="")
+        ++N;
+    std::cout<<"Number of nodes (N) = "<<N<<std::endl;
+    std::cout<<"|----------"<<std::endl;
+    inFile.close();
+
+
     auto *var_cpu = new REAL[4*N];
     for (int i = 0; i<4*N; ++i)
         var_cpu[i] = 0.0;
 
-
-    /*********** R E A D  I N S H A P E *****************/
-    std::ifstream inFile; // number of lines must be N
-    inFile.open("shape_cpp.txt");
     REAL x,y;
-
+    //std::ifstream inFile; // number of filled lines must be N
+    inFile.open("../shape_cpp.txt");
     for (int i=0; i<N; ++i) {
         inFile >> x >> y,
-        get_x(i, var_cpu, N) = x;
+                get_x(i, var_cpu, N) = x;
         get_y(i, var_cpu, N) = y;
         //std::cout<<x<<" "<<y<<std::endl;
     }
 
     inFile.close();
     /****************************************************/
+
+    /************** R E A D  C O N S T A N T S *******************/
+    inFile.open("../constants.txt");
+
+    while (not inFile.eof()) {
+        inFile >> key >> value;
+        constants.emplace(key, value);
+        //std::cout<<"key = "<<key<<"; value = "<<value<<std::endl;
+    }
+
+    inFile.close();
+
+    std::cout<<"CONSTANTS :"<<std::endl;
+
+    REAL mass = constants.at("mass"); std::cout << "|  mass = " << mass << std::endl;
+    REAL betta = constants.at("betta"); std::cout << "|  betta = " << betta << std::endl;
+    REAL l0 = constants.at("l0"); std::cout << "|  l0 = " << l0 << std::endl;
+    REAL kl = constants.at("kl"); std::cout << "|  kl = " << kl << std::endl;
+    REAL s0 = constants.at("s0"); std::cout << "|  s0 = " << s0 << std::endl;
+    REAL ks = constants.at("ks"); std::cout << "|  ks = " << ks << std::endl;
+    REAL kb = constants.at("kb"); std::cout << "|  kb = " << kb << std::endl;
+    REAL lr = constants.at("lr"); std::cout << "|  lr = " << lr << std::endl;
+    REAL kr = constants.at("kr"); std::cout << "|  kr = " << kr << std::endl;
+    REAL lp = constants.at("lp"); std::cout << "|  lp = " << lp << std::endl;
+    REAL kp = constants.at("kp"); std::cout << "|  kp = " << kp << std::endl;
+
+    std::cout<<"|----------"<<std::endl;
+    /**************************************************************/
+
 
 
     /*
@@ -82,31 +126,48 @@ int main() {
     /****************************************************/
 
 
-    REAL t = 0.0, t_step = 0.01, t_end = 100.0;
-    REAL t_print = t_end / 100.0, t_p = 0.0;
+    /****************** R E A D  T I M E S **************/
+    inFile.open("../times.txt");
+
+    while (not inFile.eof()) {
+        inFile >> key >> value;
+        constants.emplace(key, value);
+        //std::cout<<"key = "<<key<<"; value = "<<value<<std::endl;
+    }
+
+    inFile.close();
+
+    std::cout<<"TIMES :"<<std::endl;
+
+    REAL t_step = constants.at("t_step"); std::cout << "|  t_step = " << t_step << std::endl;
+    REAL t_end = constants.at("t_end"); std::cout << "|  t_end = " << t_end << std::endl;
+    REAL t_print = constants.at("t_print"); std::cout << "|  t_print = " << t_print << std::endl;
+
+    std::cout<<"|----------"<<std::endl;
+    /****************************************************/
 
 
     /// First Frame
     std::ofstream outFile;
-    outFile.open("out.txt");
+    outFile.open("../out.txt");
 
     for (int i=0; i<2*N; ++i)
         outFile << var_cpu[i] << " ";
     outFile << "\n";
 
-
+    REAL t = 0.0, t_p = 0.0;
     while (t <= t_end) {
 
-        //std::cout<<std::endl<<"step: "<<t<<" / "<<t_end<<std::endl;
+        std::cout<<std::endl<<"step: "<<t<<" / "<<t_end<<std::endl;
 
         /****** F O R C E  C A L C U L A T I O N ********************************/
-        calculate_fl<<<BLOCKS,THREADS>>>(var, N, fl_x, fl_y, 0.66, 0.3);
+        calculate_fl<<<BLOCKS,THREADS>>>(var, N, fl_x, fl_y, l0, kl);
 
         fill<<<BLOCKS,THREADS>>>(area, 0.0, 1);
         calculate_area<<<BLOCKS,THREADS>>>(lock, area, var, N);
-        calculate_fs<<<BLOCKS,THREADS>>>(var, area, N, fs_x, fs_y, 314.0, 2000.0);
+        calculate_fs<<<BLOCKS,THREADS>>>(var, area, N, fs_x, fs_y, s0, ks);
 
-        calculate_fb<<<BLOCKS,THREADS>>>(var, N, fb_x, fb_y, 0.05);
+        calculate_fb<<<BLOCKS,THREADS>>>(var, N, fb_x, fb_y, kb);
 
         fill<<<BLOCKS,THREADS>>>(f_x, 0.0, N);
         fill<<<BLOCKS,THREADS>>>(f_y, 0.0, N);
@@ -122,7 +183,7 @@ int main() {
 
 
         /**************** S T E P P E R *****************************************/
-        rhs<<<BLOCKS,THREADS>>>(var_temp, var, N, f_x, f_y, 1.0, 0.5);
+        rhs<<<BLOCKS,THREADS>>>(var_temp, var, N, f_x, f_y, mass, betta);
 
         // WHOLE STEP - E U L E R !!!
         //TODO : change to do_step(...)
